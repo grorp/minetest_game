@@ -1,5 +1,7 @@
 -- creative/inventory.lua
 
+NUM_NORMAL_SLOTS = 5
+
 -- support for MT game translation.
 local S = creative.get_translator
 
@@ -32,17 +34,36 @@ function creative.init_creative_inventory(player)
 
 	minetest.create_detached_inventory("creative_" .. player_name, {
 		allow_move = function(inv, from_list, from_index, to_list, to_index, count, player2)
-			local name = player2 and player2:get_player_name() or ""
-			if not minetest.is_creative_enabled(name) or
-					to_list == "main" then
-				return 0
+			print("allow_move called")
+			if to_index <= NUM_NORMAL_SLOTS and from_index <= NUM_NORMAL_SLOTS then
+				print("allowing move inside normal part (" .. count .. ")")
+				return count
 			end
-			return count
+			local name = player2 and player2:get_player_name() or ""
+			if minetest.is_creative_enabled(name) and
+					to_index <= NUM_NORMAL_SLOTS then
+				print("allowing move from creative part to normal part (" .. count .. ")")
+				local loc = inv:get_location()
+				local stack = inv:get_stack(from_list, from_index)
+				core.after(0, function()
+					local invv = minetest.get_inventory(loc)
+					invv:set_stack(from_list, from_index, stack)
+				end)
+				return count
+			end
+			print("disallowing move (" .. count .. ")")
+			return 0
 		end,
 		allow_put = function(inv, listname, index, stack, player2)
+			if index <= NUM_NORMAL_SLOTS then
+				return stack:get_count()
+			end
 			return 0
 		end,
 		allow_take = function(inv, listname, index, stack, player2)
+			if index <= NUM_NORMAL_SLOTS then
+				return stack:get_count()
+			end
 			local name = player2 and player2:get_player_name() or ""
 			if not minetest.is_creative_enabled(name) then
 				return 0
@@ -52,6 +73,9 @@ function creative.init_creative_inventory(player)
 		on_move = function(inv, from_list, from_index, to_list, to_index, count, player2)
 		end,
 		on_take = function(inv, listname, index, stack, player2)
+			if index <= NUM_NORMAL_SLOTS then
+				return
+			end
 			if stack and stack:get_count() > 0 then
 				minetest.log("action", player_name .. " takes " .. stack:get_name().. " from creative inventory")
 			end
@@ -118,6 +142,10 @@ function creative.update_creative_inventory(player_name, tab_content)
 	end
 
 	table.sort(creative_list, function(a, b) return order[a] < order[b] end)
+
+	for i = 1, NUM_NORMAL_SLOTS do
+		creative_list[i] = ItemStack("")
+	end
 
 	player_inv:set_size("main", #creative_list)
 	player_inv:set_list("main", creative_list)
